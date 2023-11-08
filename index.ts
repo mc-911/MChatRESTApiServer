@@ -44,6 +44,9 @@ app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`)
 })
 
+app.get('/api/resetUsers', (req, res) => {
+    db.query('')
+})
 app.post('/api/login', (req, res) => {
     console.log('req.body: ', req.body);
     const schema : Joi.AnySchema = Joi.object().keys({
@@ -149,9 +152,12 @@ const loginUser = async (res: Response, email: string, password: string) => {
     }
 }
 const addNewUser = async (email: string, hashedPassword: string, salt: string): Promise<pg.QueryResult> => {
-    return db.query(`INSERT INTO social_media.users (email, password, salt) VALUES ('${email}', '${hashedPassword}', '${salt}')`)
+    return db.query(`INSERT INTO social_media.users (email, password, salt) VALUES ('${email}', '${hashedPassword}', '${salt}') RETURNING user_id`)
 }
 
+const addEmailVerificationToken = async (userId : string, token : string) : Promise<pg.QueryResult> => {
+    return db.query(`INSERT INTO social_media.email_tokens VALUES ('${userId}', '${token}')`)
+}
 const checkEmailExists = async (email : string) : Promise<boolean> => {
 
     const result: pg.QueryResult = await db.query(`SELECT COUNT(*) as email_count FROM social_media.users WHERE email = '${email}'`);
@@ -162,7 +168,11 @@ const registerUser = async (response : Response, email: string, password: string
     if (!await checkEmailExists(email)) {
         const salt = await bcrpyt.genSalt(10);
         const hashedPassword = await bcrpyt.hash(password, salt);
-        await addNewUser(email, hashedPassword, salt);
+        const addUserResult = await addNewUser(email, hashedPassword, salt);
+        const emailToken = await bcrpyt.genSalt();
+        const verificationMessage = `${process.env.BASE_URL}/api/verify/${emailToken}`
+        await addEmailVerificationToken(addUserResult.rows[0].user_id, emailToken)
+        sendEmail(email, "Verify your Email", verificationMessage)
         console.log("User added");
         response.sendStatus(201);
     } else {
