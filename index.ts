@@ -17,6 +17,42 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 
+const getVerificationMessage = (url : string) : string => {
+    return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Static Template</title>
+  </head>
+  <style>
+    a {
+      color: black;
+    }
+  </style>
+  <body>
+    <h1>Welcome to MCSocialMedia</h1>
+    <h2>Click the button below to verify your account</h2>
+    <a
+      href="${url}"
+      style="
+        border: 1px;
+        border-style: solid;
+        height: 3rem;
+        width: 15rem;
+        border-radius: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-decoration: none;
+      "
+    >
+      Verfiy Account
+    </a>
+  </body>
+</html>`
+}
 
 
 const sendEmail = async (email : string, subject : string, text : string) => {
@@ -51,6 +87,38 @@ const sendEmail = async (email : string, subject : string, text : string) => {
       console.log(error);
     }
   };
+const sendVerificationEmail = async (email : string, url: string) => {
+    try {
+       const oauth2Client = new OAuth2(
+           process.env.client_id,
+           process.env.client_secret,
+           "https://developers.google.com/oauthplayground"
+         );
+         oauth2Client.setCredentials({
+           refresh_token: process.env.refresh_token,
+         });
+         const transporter = nodemailer.createTransport({
+           service: "gmail",
+           auth: {
+             type: "OAuth2",
+             user: process.env.email_address,
+             clientId: process.env.client_id,
+             clientSecret: process.env.client_secret,
+             refreshToken: process.env.refresh_token,
+           },
+         });
+      await transporter.sendMail({
+        from: process.env.email_address,
+        to: email,
+        subject: "Verify your email",
+        html: getVerificationMessage(url),
+      });
+      console.log("email sent sucessfully");
+    } catch (error) {
+      console.log("email not sent");
+      console.log(error);
+    }
+};
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello World!')
 })
@@ -183,8 +251,8 @@ const registerUser = async (response : Response, email: string, password: string
         const hashedPassword = await bcrpyt.hash(password, salt);
         const addUserResult = await addNewUser(email, hashedPassword, salt);
         const emailToken = await jsonwebtoken.sign({userId : addUserResult.rows[0].user_id}, process.env["jwt_secret"] as string);
-        const verificationMessage = `${process.env.BASE_URL}/api/verify/${emailToken}`
-        sendEmail(email, "Verify your Email", verificationMessage)
+        const verificationMessage = `${process.env.BASE_URL as string}/api/verify/${emailToken}`
+        sendVerificationEmail(email, verificationMessage);
         console.log("User added");
         response.sendStatus(201);
     } else {
