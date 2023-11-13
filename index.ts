@@ -6,14 +6,21 @@ import * as Joi from 'joi';
 import * as jsonwebtoken from 'jsonwebtoken';
 import * as nodemailer from 'nodemailer';
 import * as google from 'googleapis';
+
 const OAuth2 = google.Auth.OAuth2Client;
 
 const cors = require('cors');
 const app = express()
 const port = 3000
 const db = require('./db');
-
-app.use(cors());
+const cookieParser = require('cookie-parser') 
+  app.use(
+    cors({
+      origin: "http://localhost:3001",
+      credentials: true,
+    })
+  );
+  app.use(cookieParser())
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 
@@ -107,6 +114,7 @@ const sendVerificationEmail = async (email : string, url: string) => {
              refreshToken: process.env.refresh_token,
            },
          });
+    console.log(getVerificationMessage(url))
       await transporter.sendMail({
         from: process.env.email_address,
         to: email,
@@ -151,7 +159,7 @@ app.post('/api/register', (req, res) => {
     //TODO perform validation on request body
     const schema : Joi.AnySchema = Joi.object().keys({
         email: Joi.string().email().required(),
-        password: Joi.string().regex(/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[!@#\$&*~]).{8,}$/).required()
+        password: Joi.string().min(1)
     });
     
     const email = req.body.email;
@@ -169,48 +177,60 @@ app.post('/api/register', (req, res) => {
 
 })
 const authorization = (req: Request, res: Response, next: Function) => {
-    const token = req.headers.authorization;
-    if (!token) {
+    const token = req.cookies["x-auth-token"];
+    if (!token || typeof token !== "string") {
+        console.log("x-auth-token not found")
         res.sendStatus(401);
-    } 
+    } else {
     try {
         const decoded = jsonwebtoken.verify(token!, process.env["jwt_secret"] as string);
         if (typeof decoded === 'string') {
             throw new Error('Invalid token');
         }
         req.body.userId = decoded.userId;
+        console.log("Request Authenticated.. Moving on")
         next();
     } catch (err) {
+        console.log("Request not authenticated")
         res.sendStatus(401);
     } 
+    }
 }
 
 app.get('/api/users', authorization, async (req: Request, res: Response) => {
     console.log("req.body.userId: ", req.body.userId)
 });
 
-app.get('/api/verify/:token', async (req: Request, res: Response) => {
-    const token = req.params.token;
-    try {
-        verifyEmail(token) 
-        res.sendStatus(200);
-    } catch (err) {
-        res.sendStatus(401);
-    } 
+app.post('/api/verify', async (req: Request, res: Response) => {
+    const schema : Joi.AnySchema = Joi.object().keys({
+        token : Joi.string().required()
+    });
+    const validation_result : Joi.ValidationResult = schema.validate(req.body);
+    console.log("Verifying Token")
+
+    if (validation_result.error) {
+        res.sendStatus(400)
+    } else {
+       await verifyEmail(req.body.token) ? res.sendStatus(200) : res.sendStatus(400); 
+    }
 });
 
-const verifyEmail = async (token: string) => {
-    try {
+app.post('/api/authCheck', authorization, async (req: Request, res: Response) => {
+    res.send(200);
+})
+
+const verifyEmail = async (token: string) : Promise<boolean> => {
+        try {
         const decoded = jsonwebtoken.verify(token, process.env["jwt_secret"] as string);
         if (typeof decoded === 'string') {
             throw new Error('Invalid token');
         }
         const result: pg.QueryResult = await db.query(`UPDATE social_media.users SET active = true WHERE user_id = '${decoded.userId}'`);
         console.log("result: ", result);
-    } catch (err) {
-        console.log("err: ", err);
-    }
-
+        return true;
+        } catch {
+            return false;
+        }
 }
 
 const loginUser = async (res: Response, email: string, password: string) => {
@@ -225,7 +245,20 @@ const loginUser = async (res: Response, email: string, password: string) => {
         console.log("user.password: ", user.password)
         if (user.password == hashedPassword) {
             console.log("Login Successful")
-            res.json({token : jsonwebtoken.sign({userId : email}, process.env["jwt_secret"] as string)});
+            const signedJWT = jsonwebtoken.sign({userId : user.user_id}, process.env["jwt_secret"] as string, {expiresIn:'5h'});
+            res.cookie("x-auth-token", signedJWT, { 
+                // can only be accessed by server requests
+        httpOnly: true,
+        // path = where the cookie is valid
+        path: "/",
+        // domain = what domain the cookie is valid on
+         domain: "localhost",
+        // secure = only send cookie over https
+        secure: false,
+        // sameSite = only send cookie if the request is coming from the same origin
+        sameSite: "lax", // "strict" | "lax" | "none" (secure must be true)
+        // maxAge = how long the cookie is valid for in milliseconds
+        maxAge: 3600000}).sendStatus(200);
         } else {
             console.log("Password Invalid")
             res.sendStatus(400);
@@ -251,7 +284,7 @@ const registerUser = async (response : Response, email: string, password: string
         const hashedPassword = await bcrpyt.hash(password, salt);
         const addUserResult = await addNewUser(email, hashedPassword, salt);
         const emailToken = await jsonwebtoken.sign({userId : addUserResult.rows[0].user_id}, process.env["jwt_secret"] as string);
-        const verificationMessage = `${process.env.BASE_URL as string}/api/verify/${emailToken}`
+        const verificationMessage = `${process.env.FRONTEND_URL as string}/?token=${emailToken}`
         sendVerificationEmail(email, verificationMessage);
         console.log("User added");
         response.sendStatus(201);
