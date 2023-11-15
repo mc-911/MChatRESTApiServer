@@ -6,6 +6,8 @@ import * as Joi from 'joi';
 import * as jsonwebtoken from 'jsonwebtoken';
 import * as nodemailer from 'nodemailer';
 import * as google from 'googleapis';
+import { time } from 'console';
+import { chat } from 'googleapis/build/src/apis/chat';
 
 const OAuth2 = google.Auth.OAuth2Client;
 
@@ -16,7 +18,7 @@ const db = require('./db');
 const cookieParser = require('cookie-parser') 
   app.use(
     cors({
-      origin: "http://localhost:3001",
+      origin: process.env.FRONTEND_URL,
       credentials: true,
     })
   );
@@ -196,7 +198,66 @@ const authorization = (req: Request, res: Response, next: Function) => {
     } 
     }
 }
+app.post('/api/getMessages', authorization, async (req : Request, res : Response) => {
+    const schema : Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required(),
+        chatId: Joi.string().required()
+    })
+    const validation_result : Joi.ValidationResult = schema.validate(req.body);
+    if (validation_result.error) {
+      res.sendStatus(400);
+    } else {
+      if (await checkUserInChat(req.body.userId, req.body.chatId)) {
+        const messages = await getChatMessages(req.body.chatId);
+        res.send({messages}).status(200)
+      } else {
+        res.sendStatus(403);
+      }
+    }
+})
+app.post('/api/storeMessage', authorization, async (req : Request, res : Response) => {
+    const schema : Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required(),
+        chatId: Joi.string().required(),
+        timestamp : Joi.number().required(),
+        content : Joi.string().required().max(2000)
+    })
+    const validation_result : Joi.ValidationResult = schema.validate(req.body);
+    if (validation_result.error) {
+      res.sendStatus(400);
+    } else {
+      if (await checkUserInChat(req.body.userId, req.body.chatId)) {
+      await storeChatMessage(req.body.userId, req.body.chatId, req.body.timestamp, req.body.content)
+      res.sendStatus(201);
+      } else {
+        res.sendStatus(403);
+      }
+    }
+})
 
+const storeChatMessage = async (ownerId : string, chatId : string, timestamp : number, content : string) =>
+{
+  console.log("Trying to store message with these values: ", {ownerId, chatId, timestamp, content})
+const result: pg.QueryResult = await db.query(`
+  INSERT INTO social_media.messages(content, owner, chat, "timestamp")
+  VALUES ($1, $2, $3, to_timestamp($4 / 1000.0));
+`, [content, ownerId, chatId, timestamp]);
+
+  console.log(result)
+}
+
+const checkUserInChat = async (userId : string, chatId : string) : Promise<boolean> => 
+{
+  console.log("Values: ", {userId, chatId})
+  const result: pg.QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
+  console.log(result.rows[0])
+  return result.rows[0].user_in_chat;
+}
+const getChatMessages = async (chatId : string) => {
+  const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.messages where chat = $1`, [chatId]);
+  return result.rows;
+
+}
 app.get('/api/users', authorization, async (req: Request, res: Response) => {
     console.log("req.body.userId: ", req.body.userId)
 });
@@ -234,7 +295,7 @@ const verifyEmail = async (token: string) : Promise<boolean> => {
 }
 
 const loginUser = async (res: Response, email: string, password: string) => {
-    const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = '${email}'`);
+    const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = $1`, [email]);
     if (result.rows.length == 0) {
         console.log("No user found");
         res.sendStatus(400);
@@ -266,7 +327,7 @@ const loginUser = async (res: Response, email: string, password: string) => {
     }
 }
 const addNewUser = async (email: string, hashedPassword: string, salt: string): Promise<pg.QueryResult> => {
-    return db.query(`INSERT INTO social_media.users (email, password, salt) VALUES ('${email}', '${hashedPassword}', '${salt}') RETURNING user_id`)
+    return db.query(`INSERT INTO social_media.users (email, password, salt) VALUES ($1, $2, $3) RETURNING user_id`, [email, hashedPassword, salt])
 }
 
 const addEmailVerificationToken = async (userId : string, token : string) : Promise<pg.QueryResult> => {
@@ -274,7 +335,7 @@ const addEmailVerificationToken = async (userId : string, token : string) : Prom
 }
 const checkEmailExists = async (email : string) : Promise<boolean> => {
 
-    const result: pg.QueryResult = await db.query(`SELECT COUNT(*) as email_count FROM social_media.users WHERE email = '${email}'`);
+    const result: pg.QueryResult = await db.query(`SELECT COUNT(*) as email_count FROM social_media.users WHERE email = $1`, [email]);
     return result.rows[0].email_count > 0
 }
 const registerUser = async (response : Response, email: string, password: string) => {
