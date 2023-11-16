@@ -248,7 +248,6 @@ const result: pg.QueryResult = await db.query(`
 
 const checkUserInChat = async (userId : string, chatId : string) : Promise<boolean> => 
 {
-  console.log("Values: ", {userId, chatId})
   const result: pg.QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
   console.log(result.rows[0])
   return result.rows[0].user_in_chat;
