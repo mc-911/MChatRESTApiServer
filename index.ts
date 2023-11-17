@@ -276,7 +276,7 @@ app.post('/api/verify', async (req: Request, res: Response) => {
 });
 
 app.post('/api/authCheck', authorization, async (req: Request, res: Response) => {
-    res.send(200);
+    res.json({jwt : req.cookies["x-auth-token"]}).sendStatus(200);
 })
 
 const verifyEmail = async (token: string) : Promise<boolean> => {
