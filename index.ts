@@ -130,7 +130,7 @@ app.post('/api/login', (req, res) => {
     const email = req.body.email;
     const password = req.body.password;
     if (email && password) {
-        loginUser(res, email, password)
+        loginUser(res, email, password, req.headers.origin!)
     } else {
         console.log("Invalid request body")
         res.sendStatus(400);
@@ -254,7 +254,7 @@ app.post('/api/verify', async (req: Request, res: Response) => {
 });
 
 app.post('/api/authCheck', authorization, async (req: Request, res: Response) => {
-    res.json({jwt : req.cookies["x-auth-token"]}).sendStatus(200);
+    res.json({ jwt: req.cookies["x-auth-token"] });
 })
 
 const verifyEmail = async (token: string): Promise<boolean> => {
@@ -271,7 +271,7 @@ const verifyEmail = async (token: string): Promise<boolean> => {
     }
 }
 
-const loginUser = async (res: Response, email: string, password: string) => {
+const loginUser = async (res: Response, email: string, password: string, origin: string) => {
     const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = $1`, [email]);
     if (result.rows.length == 0) {
         console.log("No user found");
@@ -283,7 +283,7 @@ const loginUser = async (res: Response, email: string, password: string) => {
         console.log("user.password: ", user.password)
         if (user.password == hashedPassword) {
             console.log("Login Successful")
-            const signedJWT = jsonwebtoken.sign({ userId: user.user_id }, process.env["jwt_secret"] as string, { expiresIn: '5h' });
+            const signedJWT = jsonwebtoken.sign({ userId: user.user_id }, process.env["jwt_secret"] as string, { expiresIn: '5h', issuer: process.env["base_url"], audience: origin });
             res.cookie("x-auth-token", signedJWT, {
                 // can only be accessed by server requests
                 httpOnly: false,
