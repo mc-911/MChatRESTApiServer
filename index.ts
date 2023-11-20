@@ -8,6 +8,15 @@ import * as nodemailer from 'nodemailer';
 import * as google from 'googleapis';
 import { time } from 'console';
 import { chat } from 'googleapis/build/src/apis/chat';
+import { auth } from 'googleapis/build/src/apis/abusiveexperiencereport';
+import multer from 'multer';
+import path from 'path';
+import { Client, SendEmailV3_1, LibraryResponse } from 'node-mailjet';
+
+const mailjet = new Client({
+    apiKey: process.env.MJ_APIKEY_PUBLIC,
+    apiSecret: process.env.MJ_APIKEY_PRIVATE
+});
 
 const OAuth2 = google.Auth.OAuth2Client;
 
@@ -16,6 +25,30 @@ const app = express()
 const port = 3000
 const db = require('./db');
 const cookieParser = require('cookie-parser')
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        console.log(file.mimetype)
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const upload = multer({
+    storage: storage, limits: {}, fileFilter: function (req, file, cb) {
+        const typeValie = path.extname(file.originalname) === '.jpg';
+        if (path.extname(file.originalname) !== '.jpg') {
+            return cb(null, false);
+        }
+        cb(null, true)
+
+    }
+});
+
+const updateProfileImage = upload.single("profilePicture");
+
 app.use(
     cors({
         origin: process.env.FRONTEND_URL,
@@ -256,6 +289,45 @@ app.post('/api/verify', async (req: Request, res: Response) => {
 app.post('/api/authCheck', authorization, async (req: Request, res: Response) => {
     res.json({ jwt: req.cookies["x-auth-token"] });
 })
+
+app.get('/api/checkChatAccess/:chatId', authorization, async (req: Request, res: Response) => {
+    console.log(req.params.chatId);
+    const valid = await checkUserInChat(req.body.userId, req.params.chatId);
+    if (valid) {
+        res.sendStatus(200);
+    } else {
+        res.sendStatus(401);
+    }
+})
+
+app.get('/api/users/:userId/profilePicture', authorization, async (req: Request, res: Response) => {
+    res.sendFile("images/default_image.jpg", { root: __dirname });
+})
+
+
+app.put('/api/users/:userId/profilePicture', authorization, upload.single("profilePicture"), async (req: Request, res: Response) => {
+    updateProfileImage(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            return res.end("Max file size 2MB allowed!");
+        }
+
+        // INVALID FILE TYPE, message will return from fileFilter callback
+        else if (err) {
+            return res.end("Fart");
+        }
+
+        // FILE NOT SELECTED
+        else if (!req.file) {
+            return res.end("File is required!");
+        }
+
+        // SUCCESS
+        else {
+            console.log("File uploaded successfully!");
+            console.log("File response", req.file);
+        }
+    })
+});
 
 const verifyEmail = async (token: string): Promise<boolean> => {
     try {
