@@ -1,6 +1,5 @@
 import express, { Express, Request, Response } from 'express';
 import * as pg from 'pg'
-import bodyParser from 'body-parser'; // Import the body-parser module
 import * as bcrpyt from 'bcrypt';
 import * as Joi from 'joi';
 import * as jsonwebtoken from 'jsonwebtoken';
@@ -11,12 +10,9 @@ import { chat } from 'googleapis/build/src/apis/chat';
 import { auth } from 'googleapis/build/src/apis/abusiveexperiencereport';
 import multer from 'multer';
 import path from 'path';
-import { Client, SendEmailV3_1, LibraryResponse } from 'node-mailjet';
-
-const mailjet = new Client({
-    apiKey: process.env.MJ_APIKEY_PUBLIC,
-    apiSecret: process.env.MJ_APIKEY_PRIVATE
-});
+import Mailgun from 'mailgun.js'
+import FormData from 'form-data';
+import { file } from 'googleapis/build/src/apis/file';
 
 const OAuth2 = google.Auth.OAuth2Client;
 
@@ -31,7 +27,6 @@ const storage = multer.diskStorage({
         cb(null, 'uploads/');
     },
     filename: (req, file, cb) => {
-        console.log(file.mimetype)
         cb(null, Date.now() + '-' + file.originalname);
     }
 });
@@ -39,7 +34,8 @@ const storage = multer.diskStorage({
 const upload = multer({
     storage: storage, limits: {}, fileFilter: function (req, file, cb) {
         const typeValie = path.extname(file.originalname) === '.jpg';
-        if (path.extname(file.originalname) !== '.jpg') {
+        const acceptableFileTypes = /\.(jpg|jpeg|png|gif)$/;
+        if (!path.extname(file.originalname).match(acceptableFileTypes)) {
             return cb(null, false);
         }
         cb(null, true)
@@ -56,8 +52,8 @@ app.use(
     })
 );
 app.use(cookieParser())
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const getVerificationMessage = (url: string): string => {
     return `<!DOCTYPE html>
@@ -96,51 +92,21 @@ const getVerificationMessage = (url: string): string => {
 </html>`
 }
 
+const mailgun = new Mailgun(FormData);
+const mg = mailgun.client({ username: 'api', key: process.env.MAILGUN_API_KEY || 'key-yourkeyhere' });
 
-const sendEmail = async (email: string, subject: string, text: string) => {
-    try {
-        const transporter = nodemailer.createTransport({
-            host: "live.smtp.mailtrap.io",
-            port: 587,
-            auth: {
-                user: "api",
-                pass: process.env.smtp_passwword
-            }
-        });
-        await transporter.sendMail({
-            from: process.env.email_address,
-            to: email,
-            subject: subject,
-            text: text,
-        });
-        console.log("email sent sucessfully");
-    } catch (error) {
-        console.log("email not sent");
-        console.log(error);
-    }
-};
 const sendVerificationEmail = async (email: string, url: string) => {
-    try {
-        const transporter = nodemailer.createTransport({
-            host: "live.smtp.mailtrap.io",
-            port: 587,
-            auth: {
-                user: "api",
-                pass: process.env.smtp_passwword
-            }
-        });
-        console.log(getVerificationMessage(url))
-        await transporter.sendMail({
-            from: process.env.email_address,
-            to: email,
-            subject: "Verify your email",
-            html: getVerificationMessage(url),
-        });
-        console.log("email sent sucessfully");
-    } catch (error) {
-        console.log("email not sent");
-        console.log(error);
-    }
+    console.log(process.env.MAILGUN_API_KEY)
+
+    mg.messages.create('email.mustapha-conteh.me', {
+        from: "MChat <mailer@email.mustapha-conteh.me>",
+        to: [email],
+        subject: "Email Verification",
+        text: "Testing some Mailgun awesomeness!",
+        html: getVerificationMessage(url)
+    })
+        .then(msg => console.log(msg)) // logs response data
+        .catch(err => console.log(err)); // logs any error
 };
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello World!')
@@ -174,16 +140,18 @@ app.post('/api/register', (req, res) => {
     //TODO perform validation on request body
     const schema: Joi.AnySchema = Joi.object().keys({
         email: Joi.string().email().required(),
+        username: Joi.string().required(),
         password: Joi.string().min(1)
     });
 
     const email = req.body.email;
     const password = req.body.password;
+    const username = req.body.username;
     const validation_result: Joi.ValidationResult = schema.validate(req.body);
     const error: Joi.ValidationError | undefined = validation_result.error;
     const value = validation_result.value;
     if (!error) {
-        registerUser(res, email, password)
+        registerUser(res, email, password, username)
     } else {
         console.log("Invalid request body")
         console.log(error.message)
@@ -211,6 +179,7 @@ const authorization = (req: Request, res: Response, next: Function) => {
         }
     }
 }
+
 app.post('/api/getMessages', authorization, async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
         userId: Joi.string().required(),
@@ -264,7 +233,8 @@ const checkUserInChat = async (userId: string, chatId: string): Promise<boolean>
     return result.rows[0].user_in_chat;
 }
 const getChatMessages = async (chatId: string) => {
-    const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.messages where chat = $1`, [chatId]);
+    const result: pg.QueryResult = await db.query(`SELECT message_id, content, owner, chat, "timestamp", username
+	FROM social_media.messages JOIN social_media.users ON owner=user_id WHERE chat = $1`, [chatId]);
     return result.rows;
 
 }
@@ -304,16 +274,31 @@ app.get('/api/users/:userId/profilePicture', authorization, async (req: Request,
     res.sendFile("images/default_image.jpg", { root: __dirname });
 })
 
+app.get('/api/users/:userId/friends', authorization, async (req: Request, res: Response) => {
+    if (req.params.userId !== req.body.userId) {
+        res.sendStatus(403);
+    } else {
+        const query = "SELECT user_friends.*, username from (SELECT CASE WHEN friend_one = $1 THEN friend_two ELSE friend_one END AS user_id, chat_id FROM social_media.friends WHERE $1 IN (friend_one, friend_two)) as user_friends JOIN social_media.users on user_friends.user_id = social_media.users.user_id";
+        const result: pg.QueryResult = await db.query(query, [req.params.userId]);
+        return res.json({ friends: result.rows });
+    }
+})
 
 app.put('/api/users/:userId/profilePicture', authorization, upload.single("profilePicture"), async (req: Request, res: Response) => {
     updateProfileImage(req, res, function (err) {
+        if (!req.file) {
+            return res.sendStatus(400);
+        } else {
+            return res.sendStatus(201);
+        }
         if (err instanceof multer.MulterError) {
             return res.end("Max file size 2MB allowed!");
         }
 
         // INVALID FILE TYPE, message will return from fileFilter callback
         else if (err) {
-            return res.end("Fart");
+            console.log(err)
+            return res.end(err.message);
         }
 
         // FILE NOT SELECTED
@@ -343,6 +328,7 @@ const verifyEmail = async (token: string): Promise<boolean> => {
     }
 }
 
+
 const loginUser = async (res: Response, email: string, password: string, origin: string) => {
     const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = $1`, [email]);
     if (result.rows.length == 0) {
@@ -353,7 +339,10 @@ const loginUser = async (res: Response, email: string, password: string, origin:
         const hashedPassword = await bcrpyt.hash(password, user.salt);
         console.log("hashedPassword: ", hashedPassword)
         console.log("user.password: ", user.password)
-        if (user.password == hashedPassword) {
+        if (user.active !== true) {
+            console.log("Account not verified")
+            res.sendStatus(401);
+        } else if (user.password == hashedPassword) {
             console.log("Login Successful")
             const signedJWT = jsonwebtoken.sign({ userId: user.user_id }, process.env["jwt_secret"] as string, { expiresIn: '5h', issuer: process.env["base_url"], audience: origin });
             res.cookie("x-auth-token", signedJWT, {
@@ -369,31 +358,28 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 sameSite: "lax", // "strict" | "lax" | "none" (secure must be true)
                 // maxAge = how long the cookie is valid for in milliseconds
                 maxAge: 3600000
-            }).sendStatus(200);
+            }).json({ userId: user.user_id })
         } else {
             console.log("Password Invalid")
             res.sendStatus(400);
         }
     }
 }
-const addNewUser = async (email: string, hashedPassword: string, salt: string): Promise<pg.QueryResult> => {
-    return db.query(`INSERT INTO social_media.users (email, password, salt) VALUES ($1, $2, $3) RETURNING user_id`, [email, hashedPassword, salt])
+const addNewUser = async (email: string, username: string, hashedPassword: string, salt: string): Promise<pg.QueryResult> => {
+    return db.query(`INSERT INTO social_media.users (email, username, password, salt) VALUES ($1, $2, $3, $4) RETURNING user_id`, [email, username, hashedPassword, salt])
 }
 
-const addEmailVerificationToken = async (userId: string, token: string): Promise<pg.QueryResult> => {
-    return db.query(`INSERT INTO social_media.email_tokens VALUES ('${userId}', '${token}')`)
-}
 const checkEmailExists = async (email: string): Promise<boolean> => {
 
     const result: pg.QueryResult = await db.query(`SELECT COUNT(*) as email_count FROM social_media.users WHERE email = $1`, [email]);
     return result.rows[0].email_count > 0
 }
-const registerUser = async (response: Response, email: string, password: string) => {
+const registerUser = async (response: Response, email: string, password: string, username: string) => {
 
     if (!await checkEmailExists(email)) {
         const salt = await bcrpyt.genSalt(10);
         const hashedPassword = await bcrpyt.hash(password, salt);
-        const addUserResult = await addNewUser(email, hashedPassword, salt);
+        const addUserResult = await addNewUser(email, username, hashedPassword, salt);
         const emailToken = await jsonwebtoken.sign({ userId: addUserResult.rows[0].user_id }, process.env["jwt_secret"] as string);
         const verificationMessage = `${process.env.FRONTEND_URL as string}/?token=${emailToken}`
         sendVerificationEmail(email, verificationMessage);
