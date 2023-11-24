@@ -344,7 +344,7 @@ const loginUser = async (res: Response, email: string, password: string, origin:
             res.sendStatus(401);
         } else if (user.password == hashedPassword) {
             console.log("Login Successful")
-            const signedJWT = jsonwebtoken.sign({ userId: user.user_id }, process.env["jwt_secret"] as string, { expiresIn: '5h', issuer: process.env["base_url"], audience: origin });
+            const signedJWT = jsonwebtoken.sign({ userId: user.user_id, username: user.username }, process.env["jwt_secret"] as string, { expiresIn: '5h', issuer: process.env["base_url"], audience: origin });
             res.cookie("x-auth-token", signedJWT, {
                 // can only be accessed by server requests
                 httpOnly: false,
