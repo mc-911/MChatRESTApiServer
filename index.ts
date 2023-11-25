@@ -14,6 +14,9 @@ import Mailgun from 'mailgun.js'
 import FormData from 'form-data';
 import { file } from 'googleapis/build/src/apis/file';
 
+import { unlink } from 'fs';
+import validator from 'validator'
+
 const OAuth2 = google.Auth.OAuth2Client;
 
 const cors = require('cors');
@@ -180,6 +183,31 @@ const authorization = (req: Request, res: Response, next: Function) => {
     }
 }
 
+
+
+const specialAuthorization = (req: Request, res: Response, next: Function) => {
+    const token = req.cookies["x-auth-token"];
+    if (!token || typeof token !== "string") {
+        console.log("x-auth-token not found")
+        res.sendStatus(401);
+    } else {
+        try {
+            const decoded = jsonwebtoken.verify(token!, process.env["jwt_secret"] as string);
+            if (typeof decoded === 'string') {
+                throw new Error('Invalid token');
+            }
+            if (decoded.userId !== req.params.userId) {
+                throw new Error('JWT id and requested user id dont match')
+            }
+            req.body.userId = decoded.userId;
+            console.log("Request Authenticated.. Moving on")
+            next();
+        } catch (err) {
+            console.log("Request not authenticated")
+            res.sendStatus(401);
+        }
+    }
+}
 app.post('/api/getMessages', authorization, async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
         userId: Joi.string().required(),
@@ -262,56 +290,108 @@ app.post('/api/authCheck', authorization, async (req: Request, res: Response) =>
 
 app.get('/api/checkChatAccess/:chatId', authorization, async (req: Request, res: Response) => {
     console.log(req.params.chatId);
-    const valid = await checkUserInChat(req.body.userId, req.params.chatId);
-    if (valid) {
-        res.sendStatus(200);
+    const validUUID = validator.isUUID(req.params.userId, 4)
+    if (validUUID) {
+        const valid = await checkUserInChat(req.body.userId, req.params.chatId);
+        if (valid) {
+            res.sendStatus(200);
+        } else {
+            res.sendStatus(401);
+        }
     } else {
-        res.sendStatus(401);
+        res.sendStatus(400);
     }
 })
 
 app.get('/api/users/:userId/profilePicture', authorization, async (req: Request, res: Response) => {
-    res.sendFile("images/default_image.jpg", { root: __dirname });
-})
+    const validUUID = validator.isUUID(req.params.userId, 4)
+    if (validUUID) {
+        console.log(req.params.userId != undefined)
+        const result: pg.QueryResult = await db.query("SELECT * from social_media.users where user_id = $1", [req.params.userId])
+        if (!result.rowCount) {
+            res.sendStatus(404);
+        } else if (result.rows[0].profile_picture) {
+            res.sendFile(`uploads/${result.rows[0].profile_picture}`, { root: __dirname });
+        } else {
+            res.sendStatus(404)
+        }
+    } else {
+        res.sendStatus(400)
+    }
+}
+)
 
 app.get('/api/users/:userId/friends', authorization, async (req: Request, res: Response) => {
-    if (req.params.userId !== req.body.userId) {
-        res.sendStatus(403);
+    const validUUID = validator.isUUID(req.params.userId, 4)
+    if (validUUID) {
+
+        if (req.params.userId !== req.body.userId) {
+            res.sendStatus(403);
+        } else {
+            const query = "SELECT user_friends.*, username from (SELECT CASE WHEN friend_one = $1 THEN friend_two ELSE friend_one END AS user_id, chat_id FROM social_media.friends WHERE $1 IN (friend_one, friend_two)) as user_friends JOIN social_media.users on user_friends.user_id = social_media.users.user_id";
+            const result: pg.QueryResult = await db.query(query, [req.params.userId]);
+            return res.json({ friends: result.rows });
+        }
     } else {
-        const query = "SELECT user_friends.*, username from (SELECT CASE WHEN friend_one = $1 THEN friend_two ELSE friend_one END AS user_id, chat_id FROM social_media.friends WHERE $1 IN (friend_one, friend_two)) as user_friends JOIN social_media.users on user_friends.user_id = social_media.users.user_id";
-        const result: pg.QueryResult = await db.query(query, [req.params.userId]);
-        return res.json({ friends: result.rows });
+        res.sendStatus(400)
     }
 })
 
-app.put('/api/users/:userId/profilePicture', authorization, upload.single("profilePicture"), async (req: Request, res: Response) => {
-    updateProfileImage(req, res, function (err) {
-        if (!req.file) {
-            return res.sendStatus(400);
+app.put('/api/users/:userId/username', authorization, async (req: Request, res: Response) => {
+    const validUUID = validator.isUUID(req.params.userId, 4)
+    if (validUUID) {
+        if (req.params.userId !== req.body.userId) {
+            res.sendStatus(403);
         } else {
-            return res.sendStatus(201);
+            const result: pg.QueryResult = await db.query("UPDATE social_media.users SET username=$1 WHERE user_id = $2", [req.body.new_username, req.params.userId]);
+            return res.json({ friends: result.rows });
         }
-        if (err instanceof multer.MulterError) {
-            return res.end("Max file size 2MB allowed!");
-        }
+    }
+})
 
-        // INVALID FILE TYPE, message will return from fileFilter callback
-        else if (err) {
-            console.log(err)
-            return res.end(err.message);
-        }
+app.put('/api/users/:userId/profilePicture', specialAuthorization, upload.single("profilePicture"), async (req: Request, res: Response) => {
+    const validUUID = validator.isUUID(req.params.userId, 4)
+    if (validUUID) {
+        updateProfileImage(req, res, function (err) {
+            if (!req.file) {
+                return res.sendStatus(400);
+            } else {
+                (async () => {
+                    console.log("Running")
+                    const result: pg.QueryResult = await db.query("SELECT * FROM social_media.users where user_id = $1", [req.params.userId])
+                    if (result.rows[0].profile_picture) {
+                        unlink(`uploads/${result.rows[0].profile_picture}`, (err) => {
+                            console.log(err);
+                        });
+                    }
+                    await db.query("UPDATE social_media.users SET profile_picture=$1 WHERE user_id = $2", [req.file?.filename, req.params.userId])
+                })()
+                return res.sendStatus(201);
+            }
+            if (err instanceof multer.MulterError) {
+                return res.end("Max file size 2MB allowed!");
+            }
 
-        // FILE NOT SELECTED
-        else if (!req.file) {
-            return res.end("File is required!");
-        }
+            // INVALID FILE TYPE, message will return from fileFilter callback
+            else if (err) {
+                console.log(err)
+                return res.end(err.message);
+            }
 
-        // SUCCESS
-        else {
-            console.log("File uploaded successfully!");
-            console.log("File response", req.file);
-        }
-    })
+            // FILE NOT SELECTED
+            else if (!req.file) {
+                return res.end("File is required!");
+            }
+
+            // SUCCESS
+            else {
+                console.log("File uploaded successfully!");
+                console.log("File response", req.file);
+            }
+        })
+    } else {
+        res.sendStatus(400);
+    }
 });
 
 const verifyEmail = async (token: string): Promise<boolean> => {
@@ -358,7 +438,7 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 sameSite: "lax", // "strict" | "lax" | "none" (secure must be true)
                 // maxAge = how long the cookie is valid for in milliseconds
                 maxAge: 3600000
-            }).json({ userId: user.user_id })
+            }).json({ userId: user.user_id, username: user.username })
         } else {
             console.log("Password Invalid")
             res.sendStatus(400);
