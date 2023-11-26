@@ -12,12 +12,10 @@ import multer from 'multer';
 import path from 'path';
 import Mailgun from 'mailgun.js'
 import FormData from 'form-data';
-import { file } from 'googleapis/build/src/apis/file';
 
 import { unlink } from 'fs';
 import validator from 'validator'
 
-const OAuth2 = google.Auth.OAuth2Client;
 
 const cors = require('cors');
 const app = express()
