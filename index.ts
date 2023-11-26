@@ -5,7 +5,7 @@ import * as Joi from 'joi';
 import * as jsonwebtoken from 'jsonwebtoken';
 import * as nodemailer from 'nodemailer';
 import * as google from 'googleapis';
-import { time } from 'console';
+import { error, time } from 'console';
 import { chat } from 'googleapis/build/src/apis/chat';
 import { auth } from 'googleapis/build/src/apis/abusiveexperiencereport';
 import multer from 'multer';
@@ -310,12 +310,25 @@ app.get('/api/users/:userId/friends', authorization, validateUserIdParam, async 
 })
 
 app.put('/api/users/:userId/username', authorization, validateUserIdParam, async (req: Request, res: Response) => {
-    const validUUID = validator.isUUID(req.params.userId, 4)
-    if (req.params.userId !== req.body.userId) {
-        res.sendStatus(403);
+    const schema: Joi.AnySchema = Joi.object().keys({
+        new_username: Joi.string().required(),
+        userId: Joi.string().required()
+    });
+    const validation_result: Joi.ValidationResult = schema.validate(req.body);
+    if (!validation_result.error) {
+        if (req.params.userId !== req.body.userId) {
+            res.sendStatus(403);
+        } else {
+            const result: pg.QueryResult = await db.query("UPDATE social_media.users SET username=$1 WHERE user_id = $2", [req.body.new_username, req.params.userId]);
+            if (result.rowCount == 0) {
+                res.sendStatus(404);
+            } else {
+                res.json({ new_username: req.body.new_username });
+            }
+        }
     } else {
-        const result: pg.QueryResult = await db.query("UPDATE social_media.users SET username=$1 WHERE user_id = $2", [req.body.new_username, req.params.userId]);
-        return res.json({ friends: result.rows });
+        res.statusCode = 400;
+        res.send(validation_result.error);
     }
 })
 
