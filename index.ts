@@ -228,28 +228,6 @@ app.post('/api/storeMessage', authorization, async (req: Request, res: Response)
         }
     }
 })
-
-const storeChatMessage = async (ownerId: string, chatId: string, timestamp: number, content: string) => {
-    console.log("Trying to store message with these values: ", { ownerId, chatId, timestamp, content })
-    const result: pg.QueryResult = await db.query(`
-  INSERT INTO social_media.messages(content, owner, chat, "timestamp")
-  VALUES ($1, $2, $3, to_timestamp($4 / 1000.0));
-`, [content, ownerId, chatId, timestamp]);
-
-    console.log(result)
-}
-
-const checkUserInChat = async (userId: string, chatId: string): Promise<boolean> => {
-    const result: pg.QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
-    console.log(result.rows[0])
-    return result.rows[0].user_in_chat;
-}
-const getChatMessages = async (chatId: string) => {
-    const result: pg.QueryResult = await db.query(`SELECT message_id, content, owner, chat, "timestamp", username
-	FROM social_media.messages JOIN social_media.users ON owner=user_id WHERE chat = $1`, [chatId]);
-    return result.rows;
-
-}
 app.get('/api/users', authorization, async (req: Request, res: Response) => {
     console.log("req.body.userId: ", req.body.userId)
 });
@@ -274,7 +252,7 @@ app.post('/api/authCheck', authorization, async (req: Request, res: Response) =>
 
 app.get('/api/checkChatAccess/:chatId', authorization, async (req: Request, res: Response) => {
     console.log(req.params.chatId);
-    const validUUID = validator.isUUID(req.params.userId, 4)
+    const validUUID = validator.isUUID(req.params.chatId, 4)
     if (validUUID) {
         const valid = await checkUserInChat(req.body.userId, req.params.chatId);
         if (valid) {
@@ -308,6 +286,104 @@ app.get('/api/users/:userId/friends', authorization, validateUserIdParam, async 
         return res.json({ friends: result.rows });
     }
 })
+app.delete('/api/users/:userId/friends/:friendId', authorization, validateUserIdParam, async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required(),
+        friendId: Joi.string().required()
+    });
+    const error = schema.validate(req.params).error;
+    if (req.params.userId !== req.body.userId) {
+        res.sendStatus(403);
+    } else if (error) {
+        res.statusCode = 400;
+        res.send(error.message)
+    } else {
+        const query = "DELETE FROM social_media.friends WHERE $1 in (friend_one, friend_two) AND $2 in (friend_one, friend_two)"
+        const result: pg.QueryResult = await db.query(query, [req.params.userId, req.params.friendId]);
+        return res.json({ friends: result.rows });
+    }
+})
+app.post('/api/users/:userId/friend_request', authorization, validateUserIdParam, async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        friend_email: Joi.string().required(),
+        userId: Joi.string().required()
+    });
+    const error = schema.validate(req.body).error;
+    if (!error) {
+        const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, (SELECT user_id from social_media.users where email = $2))", [req.params.userId, req.body.friend_email]);
+        console.log(result)
+        res.sendStatus(201);
+    } else {
+        res.statusCode = 400;
+        res.send(error.message);
+    }
+});
+
+
+app.post('/api/users/:userId/deny_request', authorization, validateUserIdParam, async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        request_id: Joi.string().required(),
+        userId: Joi.string().required()
+    });
+    const error = schema.validate(req.body).error;
+    if (!error) {
+        const requestResult: pg.QueryResult = await db.query("SELECT friend_request_id, requester, requestee FROM social_media.friend_requests WHERE friend_request_id = $1", [req.body.request_id])
+
+        if (requestResult.rowCount == 0) {
+            res.sendStatus(404);
+        } else if (requestResult.rows[0].requester != req.body.userId && requestResult.rows[0].requestee != req.body.userId) {
+            res.sendStatus(401);
+        } else {
+            const result: pg.QueryResult = await db.query("DELETE FROM social_media.friend_requests WHERE friend_request_id = $1;", [req.body.request_id]);
+            console.log(result)
+            res.sendStatus(201);
+        }
+
+    } else {
+        res.statusCode = 400;
+        res.send(error.message);
+    }
+});
+
+app.get('/api/users/:userId/friend_request', authorization, validateUserIdParam, async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required()
+    });
+    const error = schema.validate(req.body).error;
+    if (!error) {
+        const result: pg.QueryResult = await db.query("SELECT user_requests.*, username from (SELECT CASE WHEN requestee = $1 THEN requester ELSE requestee END AS user_id, CASE WHEN requestee = $1 THEN 'false' ELSE 'true' END AS requested, friend_request_id FROM social_media.friend_requests WHERE $1 IN (requester, requestee)) as user_requests JOIN social_media.users on user_requests.user_id = social_media.users.user_id", [req.params.userId]);
+        console.log(result)
+        res.send(result.rows)
+    } else {
+        res.statusCode = 400;
+        res.send(error.message);
+    }
+});
+
+
+app.post('/api/users/:userId/accept_request', authorization, validateUserIdParam, async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        request_id: Joi.string().required(),
+        userId: Joi.string().required()
+    });
+    const error = schema.validate(req.body).error;
+    if (!error) {
+        const requestResult: pg.QueryResult = await db.query("SELECT friend_request_id, requester, requestee FROM social_media.friend_requests WHERE friend_request_id = $1", [req.body.request_id])
+        if (requestResult.rowCount == 0) {
+            res.sendStatus(404);
+        } else if (requestResult.rows[0].requestee != req.body.userId) {
+            res.sendStatus(401);
+        } else {
+            const deleteResult: pg.QueryResult = await db.query("DELETE FROM social_media.friend_requests WHERE friend_request_id = $1", [req.body.request_id]);
+            const insertResult: pg.QueryResult = await db.query("INSERT INTO social_media.friends(friend_one, friend_two) VALUES ($1, $2);", [requestResult.rows[0].requester, requestResult.rows[0].requestee]);
+            res.sendStatus(201);
+        }
+
+    } else {
+        res.statusCode = 400;
+        res.send(error.message);
+    }
+});
 
 app.put('/api/users/:userId/username', authorization, validateUserIdParam, async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
@@ -331,6 +407,7 @@ app.put('/api/users/:userId/username', authorization, validateUserIdParam, async
         res.send(validation_result.error);
     }
 })
+
 
 app.put('/api/users/:userId/profilePicture', authorization, validateUserIdParam, upload.single("profilePicture"), async (req: Request, res: Response) => {
     updateProfileImage(req, res, function (err) {
@@ -427,4 +504,26 @@ const registerUser = async (response: Response, email: string, password: string,
         console.log("Email already exists");
         response.sendStatus(400);
     }
+}
+
+
+const storeChatMessage = async (ownerId: string, chatId: string, timestamp: number, content: string) => {
+    console.log("Trying to store message with these values: ", { ownerId, chatId, timestamp, content })
+    const result: pg.QueryResult = await db.query(`
+  INSERT INTO social_media.messages(content, owner, chat, "timestamp")
+  VALUES ($1, $2, $3, to_timestamp($4 / 1000.0));
+`, [content, ownerId, chatId, timestamp]);
+
+    console.log(result)
+}
+
+const checkUserInChat = async (userId: string, chatId: string): Promise<boolean> => {
+    const result: pg.QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
+    console.log(result.rows[0])
+    return result.rows[0].user_in_chat;
+}
+const getChatMessages = async (chatId: string) => {
+    const result: pg.QueryResult = await db.query(`SELECT message_id, content, owner, chat, "timestamp", username
+	FROM social_media.messages JOIN social_media.users ON owner=user_id WHERE chat = $1`, [chatId]);
+    return result.rows;
 }
