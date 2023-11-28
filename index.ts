@@ -470,7 +470,7 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 // path = where the cookie is valid
                 path: "/",
                 // domain = what domain the cookie is valid on
-                domain: "localhost",
+                domain: process.env["base_url"],
                 // secure = only send cookie over https
                 secure: false,
                 // sameSite = only send cookie if the request is coming from the same origin
