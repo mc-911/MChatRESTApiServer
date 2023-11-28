@@ -5,7 +5,7 @@
 -- Dumped from database version 16.0
 -- Dumped by pg_dump version 16.0
 
--- Started on 2023-11-27 00:13:23
+-- Started on 2023-11-28 16:30:01
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -20,17 +20,15 @@ SET row_security = off;
 
 --
 -- TOC entry 8 (class 2615 OID 16574)
--- Name: social_media; Type: SCHEMA; Schema: -; Owner: postgres
+-- Name: social_media; Type: SCHEMA; Schema: -; Owner: -
 --
 
 CREATE SCHEMA social_media;
 
 
-ALTER SCHEMA social_media OWNER TO postgres;
-
 --
--- TOC entry 873 (class 1247 OID 16740)
--- Name: chat_type; Type: TYPE; Schema: social_media; Owner: postgres
+-- TOC entry 875 (class 1247 OID 16740)
+-- Name: chat_type; Type: TYPE; Schema: social_media; Owner: -
 --
 
 CREATE TYPE social_media.chat_type AS ENUM (
@@ -39,11 +37,9 @@ CREATE TYPE social_media.chat_type AS ENUM (
 );
 
 
-ALTER TYPE social_media.chat_type OWNER TO postgres;
-
 --
--- TOC entry 244 (class 1255 OID 16575)
--- Name: create_dm_on_friend_insert(); Type: FUNCTION; Schema: social_media; Owner: postgres
+-- TOC entry 245 (class 1255 OID 16575)
+-- Name: create_dm_on_friend_insert(); Type: FUNCTION; Schema: social_media; Owner: -
 --
 
 CREATE FUNCTION social_media.create_dm_on_friend_insert() RETURNS trigger
@@ -61,7 +57,25 @@ BEGIN
 END;$$;
 
 
-ALTER FUNCTION social_media.create_dm_on_friend_insert() OWNER TO postgres;
+--
+-- TOC entry 246 (class 1255 OID 16819)
+-- Name: remove_dm_on_friend_delete(); Type: FUNCTION; Schema: social_media; Owner: -
+--
+
+CREATE FUNCTION social_media.remove_dm_on_friend_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$BEGIN
+
+DELETE FROM social_media.messages WHERE chat = old.chat_id;
+DELETE FROM social_media.chat_members WHERE chat = old.chat_id;
+DELETE FROM social_media.chats WHERE chat_id = old.chat_id; 
+
+return new;
+
+END; 
+	
+	$$;
+
 
 SET default_tablespace = '';
 
@@ -69,7 +83,7 @@ SET default_table_access_method = heap;
 
 --
 -- TOC entry 218 (class 1259 OID 16576)
--- Name: chat_members; Type: TABLE; Schema: social_media; Owner: postgres
+-- Name: chat_members; Type: TABLE; Schema: social_media; Owner: -
 --
 
 CREATE TABLE social_media.chat_members (
@@ -78,11 +92,9 @@ CREATE TABLE social_media.chat_members (
 );
 
 
-ALTER TABLE social_media.chat_members OWNER TO postgres;
-
 --
 -- TOC entry 219 (class 1259 OID 16579)
--- Name: chats; Type: TABLE; Schema: social_media; Owner: postgres
+-- Name: chats; Type: TABLE; Schema: social_media; Owner: -
 --
 
 CREATE TABLE social_media.chats (
@@ -91,11 +103,21 @@ CREATE TABLE social_media.chats (
 );
 
 
-ALTER TABLE social_media.chats OWNER TO postgres;
+--
+-- TOC entry 223 (class 1259 OID 16800)
+-- Name: friend_requests; Type: TABLE; Schema: social_media; Owner: -
+--
+
+CREATE TABLE social_media.friend_requests (
+    friend_request_id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    requester uuid NOT NULL,
+    requestee uuid NOT NULL
+);
+
 
 --
 -- TOC entry 220 (class 1259 OID 16583)
--- Name: friends; Type: TABLE; Schema: social_media; Owner: postgres
+-- Name: friends; Type: TABLE; Schema: social_media; Owner: -
 --
 
 CREATE TABLE social_media.friends (
@@ -105,11 +127,9 @@ CREATE TABLE social_media.friends (
 );
 
 
-ALTER TABLE social_media.friends OWNER TO postgres;
-
 --
 -- TOC entry 221 (class 1259 OID 16586)
--- Name: messages; Type: TABLE; Schema: social_media; Owner: postgres
+-- Name: messages; Type: TABLE; Schema: social_media; Owner: -
 --
 
 CREATE TABLE social_media.messages (
@@ -121,11 +141,9 @@ CREATE TABLE social_media.messages (
 );
 
 
-ALTER TABLE social_media.messages OWNER TO postgres;
-
 --
 -- TOC entry 222 (class 1259 OID 16593)
--- Name: users; Type: TABLE; Schema: social_media; Owner: postgres
+-- Name: users; Type: TABLE; Schema: social_media; Owner: -
 --
 
 CREATE TABLE social_media.users (
@@ -139,11 +157,9 @@ CREATE TABLE social_media.users (
 );
 
 
-ALTER TABLE social_media.users OWNER TO postgres;
-
 --
--- TOC entry 4671 (class 2606 OID 16600)
--- Name: friends CHK_friends_are_different; Type: CHECK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4677 (class 2606 OID 16600)
+-- Name: friends CHK_friends_are_different; Type: CHECK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE social_media.friends
@@ -151,8 +167,8 @@ ALTER TABLE social_media.friends
 
 
 --
--- TOC entry 4675 (class 2606 OID 16602)
--- Name: chats chat_pkey; Type: CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4682 (class 2606 OID 16602)
+-- Name: chats chat_pkey; Type: CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.chats
@@ -160,8 +176,8 @@ ALTER TABLE ONLY social_media.chats
 
 
 --
--- TOC entry 4673 (class 2606 OID 16604)
--- Name: chat_members chat_user_pair; Type: CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4680 (class 2606 OID 16604)
+-- Name: chat_members chat_user_pair; Type: CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.chat_members
@@ -169,8 +185,17 @@ ALTER TABLE ONLY social_media.chat_members
 
 
 --
--- TOC entry 4677 (class 2606 OID 16606)
--- Name: friends friends_pkey; Type: CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4690 (class 2606 OID 16805)
+-- Name: friend_requests friend_requests_pkey; Type: CONSTRAINT; Schema: social_media; Owner: -
+--
+
+ALTER TABLE ONLY social_media.friend_requests
+    ADD CONSTRAINT friend_requests_pkey PRIMARY KEY (friend_request_id);
+
+
+--
+-- TOC entry 4684 (class 2606 OID 16606)
+-- Name: friends friends_pkey; Type: CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.friends
@@ -178,8 +203,8 @@ ALTER TABLE ONLY social_media.friends
 
 
 --
--- TOC entry 4679 (class 2606 OID 16608)
--- Name: messages messages_pkey; Type: CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4686 (class 2606 OID 16608)
+-- Name: messages messages_pkey; Type: CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.messages
@@ -187,8 +212,17 @@ ALTER TABLE ONLY social_media.messages
 
 
 --
--- TOC entry 4681 (class 2606 OID 16610)
--- Name: users user_pkey; Type: CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4678 (class 2606 OID 16816)
+-- Name: friend_requests requester and requester are different; Type: CHECK CONSTRAINT; Schema: social_media; Owner: -
+--
+
+ALTER TABLE social_media.friend_requests
+    ADD CONSTRAINT "requester and requester are different" CHECK ((requester <> requestee)) NOT VALID;
+
+
+--
+-- TOC entry 4688 (class 2606 OID 16610)
+-- Name: users user_pkey; Type: CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.users
@@ -196,16 +230,24 @@ ALTER TABLE ONLY social_media.users
 
 
 --
--- TOC entry 4689 (class 2620 OID 16762)
--- Name: friends insert_dm_users_into_chat; Type: TRIGGER; Schema: social_media; Owner: postgres
+-- TOC entry 4700 (class 2620 OID 16762)
+-- Name: friends insert_dm_users_into_chat; Type: TRIGGER; Schema: social_media; Owner: -
 --
 
 CREATE TRIGGER insert_dm_users_into_chat BEFORE INSERT ON social_media.friends FOR EACH ROW EXECUTE FUNCTION social_media.create_dm_on_friend_insert();
 
 
 --
--- TOC entry 4682 (class 2606 OID 16612)
--- Name: chat_members chat; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4701 (class 2620 OID 16820)
+-- Name: friends remove_dm_on_friend_delete; Type: TRIGGER; Schema: social_media; Owner: -
+--
+
+CREATE TRIGGER remove_dm_on_friend_delete AFTER DELETE ON social_media.friends FOR EACH ROW EXECUTE FUNCTION social_media.remove_dm_on_friend_delete();
+
+
+--
+-- TOC entry 4691 (class 2606 OID 16612)
+-- Name: chat_members chat; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.chat_members
@@ -213,8 +255,8 @@ ALTER TABLE ONLY social_media.chat_members
 
 
 --
--- TOC entry 4687 (class 2606 OID 16617)
--- Name: messages chat; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4696 (class 2606 OID 16617)
+-- Name: messages chat; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.messages
@@ -222,8 +264,8 @@ ALTER TABLE ONLY social_media.messages
 
 
 --
--- TOC entry 4684 (class 2606 OID 16757)
--- Name: friends chat; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4693 (class 2606 OID 16757)
+-- Name: friends chat; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.friends
@@ -231,8 +273,8 @@ ALTER TABLE ONLY social_media.friends
 
 
 --
--- TOC entry 4685 (class 2606 OID 16622)
--- Name: friends friend_one; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4694 (class 2606 OID 16622)
+-- Name: friends friend_one; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.friends
@@ -240,8 +282,8 @@ ALTER TABLE ONLY social_media.friends
 
 
 --
--- TOC entry 4686 (class 2606 OID 16627)
--- Name: friends friend_two; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4695 (class 2606 OID 16627)
+-- Name: friends friend_two; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.friends
@@ -249,8 +291,8 @@ ALTER TABLE ONLY social_media.friends
 
 
 --
--- TOC entry 4688 (class 2606 OID 16632)
--- Name: messages owner; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4697 (class 2606 OID 16632)
+-- Name: messages owner; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.messages
@@ -258,15 +300,33 @@ ALTER TABLE ONLY social_media.messages
 
 
 --
--- TOC entry 4683 (class 2606 OID 16637)
--- Name: chat_members user; Type: FK CONSTRAINT; Schema: social_media; Owner: postgres
+-- TOC entry 4698 (class 2606 OID 16811)
+-- Name: friend_requests requestee; Type: FK CONSTRAINT; Schema: social_media; Owner: -
+--
+
+ALTER TABLE ONLY social_media.friend_requests
+    ADD CONSTRAINT requestee FOREIGN KEY (requestee) REFERENCES social_media.users(user_id);
+
+
+--
+-- TOC entry 4699 (class 2606 OID 16806)
+-- Name: friend_requests requester; Type: FK CONSTRAINT; Schema: social_media; Owner: -
+--
+
+ALTER TABLE ONLY social_media.friend_requests
+    ADD CONSTRAINT requester FOREIGN KEY (requester) REFERENCES social_media.users(user_id);
+
+
+--
+-- TOC entry 4692 (class 2606 OID 16637)
+-- Name: chat_members user; Type: FK CONSTRAINT; Schema: social_media; Owner: -
 --
 
 ALTER TABLE ONLY social_media.chat_members
     ADD CONSTRAINT "user" FOREIGN KEY ("user") REFERENCES social_media.users(user_id) NOT VALID;
 
 
--- Completed on 2023-11-27 00:13:23
+-- Completed on 2023-11-28 16:30:01
 
 --
 -- PostgreSQL database dump complete
