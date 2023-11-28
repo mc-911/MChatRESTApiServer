@@ -92,6 +92,7 @@ const getVerificationMessage = (url: string): string => {
   </body>
 </html>`
 }
+console.log("Database_URL", process.env.DATABASE_URL);
 
 const mailgun = new Mailgun(FormData);
 const mg = mailgun.client({ username: 'api', key: process.env.MAILGUN_API_KEY || 'key-yourkeyhere' });
@@ -129,8 +130,8 @@ app.post('/api/login', (req, res) => {
     const error: Joi.ValidationError | undefined = validation_result.error;
     const email = req.body.email;
     const password = req.body.password;
-    if (email && password) {
-        loginUser(res, email, password, req.headers.origin!)
+    if (email && password && req.headers.origin) {
+        loginUser(res, email, password, req.headers.origin)
     } else {
         console.log("Invalid request body")
         res.sendStatus(400);
