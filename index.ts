@@ -19,7 +19,7 @@ import validator from 'validator'
 
 const cors = require('cors');
 const app = express()
-const port = process.env.PORT
+const port = process.env.PORT ? process.env.PORT : 3000
 const db = require('./db');
 const cookieParser = require('cookie-parser')
 
@@ -308,9 +308,14 @@ app.post('/api/users/:userId/friend_request', authorization, validateUserIdParam
     });
     const error = schema.validate(req.body).error;
     if (!error) {
-        const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, (SELECT user_id from social_media.users where email = $2))", [req.params.userId, req.body.friend_email]);
-        console.log(result)
-        res.sendStatus(201);
+        const emailResult: pg.QueryResult = await db.query("SELECT user_id from social_media.users where email = $1", [req.body.friend_email])
+        if (emailResult.rowCount > 0) {
+            const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, $2)", [req.params.userId, emailResult.rows[0].user_id]);
+            console.log(result)
+            res.sendStatus(201);
+        } else {
+            res.sendStatus(404);
+        }
     } else {
         res.statusCode = 400;
         res.send(error.message);
