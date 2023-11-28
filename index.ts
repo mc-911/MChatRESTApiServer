@@ -472,9 +472,9 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 // domain = what domain the cookie is valid on
                 domain: process.env["base_url"],
                 // secure = only send cookie over https
-                secure: false,
+                secure: true,
                 // sameSite = only send cookie if the request is coming from the same origin
-                sameSite: "lax", // "strict" | "lax" | "none" (secure must be true)
+                sameSite: "none", // "strict" | "lax" | "none" (secure must be true)
                 // maxAge = how long the cookie is valid for in milliseconds
                 maxAge: 3600000
             }).json({ userId: user.user_id, username: user.username })
