@@ -12,8 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "tsc": "2.0.4",
-    "typescript": "^5.3.2",
     "@types/node-mailjet": "^3.3.11",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
@@ -46,6 +44,6 @@
     "@types/nodemailer": "^6.4.13",
     "@types/pg": "^8.10.7",
     "@types/validator": "^13.11.7",
-    "typescript": "^5.2.2"
+    "typescript": "^5.3.2"
   }
 }
