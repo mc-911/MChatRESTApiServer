@@ -19,7 +19,7 @@ import validator from 'validator'
 
 const cors = require('cors');
 const app = express()
-const port = 3000
+const port = process.env.PORT
 const db = require('./db');
 const cookieParser = require('cookie-parser')
 
