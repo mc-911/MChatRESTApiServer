@@ -448,7 +448,9 @@ const verifyEmail = async (token: string): Promise<boolean> => {
 
 
 const loginUser = async (res: Response, email: string, password: string, origin: string) => {
+    console.log("Looking for user with email: ", email)
     const result: pg.QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = $1`, [email]);
+    console.log(result)
     if (result.rows.length == 0) {
         console.log("No user found");
         res.sendStatus(400);
