@@ -9,9 +9,8 @@ import Mailgun from 'mailgun.js'
 import FormData from 'form-data';
 import { unlink } from 'fs';
 import validator from 'validator'
-import { S3 } from 'aws-sdk'
 import { error } from 'console';
-
+import { S3 } from '@aws-sdk/client-s3';
 const cors = require('cors');
 const app = express()
 const port = process.env.PORT ? process.env.PORT : 3000
@@ -27,8 +26,11 @@ const cookieParser = require('cookie-parser')
 //     }
 // });
 const s3 = new S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string
+    },
+    region: process.env.AWS_S3_REGION
 });
 const storage = multer.memoryStorage();
 
@@ -422,12 +424,12 @@ app.put('/api/users/:userId/profilePicture', authorization, validateUserIdParam,
         const new_filename = Date.now() + '-' + file.originalname;
         console.log("Running2")
         console.log(process.env.AWS_S3_BUCKET_NAME)
-        const uploadResult = await s3.upload({
+        const uploadResult = await s3.putObject({
             Bucket: process.env.AWS_S3_BUCKET_NAME as string,
             Key: new_filename,
             Body: file.buffer,
             ContentType: file.mimetype
-        }).promise()
+        })
         console.log("Blah")
         console.log("Upload Result", uploadResult)
         const result: pg.QueryResult = await db.query("SELECT * FROM social_media.users where user_id = $1", [req.params.userId])
