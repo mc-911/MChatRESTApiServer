@@ -3,19 +3,14 @@ import * as pg from 'pg'
 import * as bcrpyt from 'bcrypt';
 import * as Joi from 'joi';
 import * as jsonwebtoken from 'jsonwebtoken';
-import * as nodemailer from 'nodemailer';
-import * as google from 'googleapis';
-import { error, time } from 'console';
-import { chat } from 'googleapis/build/src/apis/chat';
-import { auth } from 'googleapis/build/src/apis/abusiveexperiencereport';
 import multer from 'multer';
 import path from 'path';
 import Mailgun from 'mailgun.js'
 import FormData from 'form-data';
-
 import { unlink } from 'fs';
 import validator from 'validator'
-
+import { S3 } from 'aws-sdk'
+import { error } from 'console';
 
 const cors = require('cors');
 const app = express()
@@ -23,18 +18,23 @@ const port = process.env.PORT ? process.env.PORT : 3000
 const db = require('./db');
 const cookieParser = require('cookie-parser')
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
+// const storage = multer.diskStorage({
+//     destination: (req, file, cb) => {
+//         cb(null, 'uploads/');
+//     },
+//     filename: (req, file, cb) => {
+//         cb(null, Date.now() + '-' + file.originalname);
+//     }
+// });
+const s3 = new S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
+const storage = multer.memoryStorage();
+
 
 const upload = multer({
     storage: storage, limits: {}, fileFilter: function (req, file, cb) {
-        const typeValie = path.extname(file.originalname) === '.jpg';
         const acceptableFileTypes = /\.(jpg|jpeg|png|gif)$/;
         if (!path.extname(file.originalname).match(acceptableFileTypes)) {
             return cb(null, false);
@@ -414,23 +414,29 @@ app.put('/api/users/:userId/username', authorization, validateUserIdParam, async
 
 
 app.put('/api/users/:userId/profilePicture', authorization, validateUserIdParam, upload.single("profilePicture"), async (req: Request, res: Response) => {
-    updateProfileImage(req, res, function (err) {
-        if (!req.file) {
-            return res.sendStatus(400);
-        } else {
-            (async () => {
-                console.log("Running")
-                const result: pg.QueryResult = await db.query("SELECT * FROM social_media.users where user_id = $1", [req.params.userId])
-                if (result.rows[0].profile_picture) {
-                    unlink(`uploads/${result.rows[0].profile_picture}`, (err) => {
-                        console.log(err);
-                    });
-                }
-                await db.query("UPDATE social_media.users SET profile_picture=$1 WHERE user_id = $2", [req.file?.filename, req.params.userId])
-            })()
-            return res.sendStatus(201);
+    req.setTimeout(0);
+    if (!req.file) {
+        return res.sendStatus(400);
+    } else {
+        const file = req.file;
+        const new_filename = Date.now() + '-' + file.originalname;
+        console.log("Running2")
+        console.log(process.env.AWS_S3_BUCKET_NAME)
+        const uploadResult = await s3.upload({
+            Bucket: process.env.AWS_S3_BUCKET_NAME as string,
+            Key: new_filename,
+            Body: file.buffer,
+            ContentType: file.mimetype
+        }).promise()
+        console.log("Blah")
+        console.log("Upload Result", uploadResult)
+        const result: pg.QueryResult = await db.query("SELECT * FROM social_media.users where user_id = $1", [req.params.userId])
+        if (result.rows[0].profile_picture) {
+            s3.deleteObject({ Bucket: process.env.AWS_S3_BUCKET_NAME as string, Key: result.rows[0].profile_picture })
         }
-    })
+        await db.query("UPDATE social_media.users SET profile_picture=$1 WHERE user_id = $2", [new_filename, req.params.userId])
+        return res.sendStatus(201);
+    }
 });
 
 const verifyEmail = async (token: string): Promise<boolean> => {
@@ -472,9 +478,9 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 // domain = what domain the cookie is valid on
                 domain: process.env["base_url"],
                 // secure = only send cookie over https
-                secure: true,
+                secure: process.env.ENVIRONMENT === "dev" ? false : true,
                 // sameSite = only send cookie if the request is coming from the same origin
-                sameSite: "none", // "strict" | "lax" | "none" (secure must be true)
+                sameSite: process.env.ENVIRONMENT === "dev" ? "none" : "lax", // "strict" | "lax" | "none" (secure must be true)
                 // maxAge = how long the cookie is valid for in milliseconds
                 maxAge: 3600000
             }).json({ userId: user.user_id, username: user.username })
