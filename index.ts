@@ -480,7 +480,7 @@ const loginUser = async (res: Response, email: string, password: string, origin:
                 // secure = only send cookie over https
                 secure: process.env.ENVIRONMENT === "dev" ? false : true,
                 // sameSite = only send cookie if the request is coming from the same origin
-                sameSite: process.env.ENVIRONMENT === "dev" ? "none" : "lax", // "strict" | "lax" | "none" (secure must be true)
+                sameSite: process.env.ENVIRONMENT === "dev" ? "lax" : "none", // "strict" | "lax" | "none" (secure must be true)
                 // maxAge = how long the cookie is valid for in milliseconds
                 maxAge: 3600000
             }).json({ userId: user.user_id, username: user.username })
