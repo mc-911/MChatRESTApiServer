@@ -7,9 +7,7 @@ import multer from 'multer';
 import path from 'path';
 import Mailgun from 'mailgun.js'
 import FormData from 'form-data';
-import { unlink } from 'fs';
 import validator from 'validator'
-import { error } from 'console';
 import { S3, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -309,13 +307,27 @@ app.post('/api/users/:userId/friend_request', authorization, validateUserIdParam
     });
     const error = schema.validate(req.body).error;
     if (!error) {
-        const emailResult: pg.QueryResult = await db.query("SELECT user_id from social_media.users where email = $1", [req.body.friend_email])
-        if (emailResult.rowCount > 0) {
-            const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, $2)", [req.params.userId, emailResult.rows[0].user_id]);
-            console.log(result)
-            res.sendStatus(201);
-        } else {
+        const emailResult: pg.QueryResult = await db.query("SELECT * from social_media.users where email = $1", [req.body.friend_email])
+        if (emailResult.rowCount == 0) {
             res.sendStatus(404);
+        } else if (req.params.userId === emailResult.rows[0].user_id) {
+            res.statusCode = 403;
+            res.json({ error: "Can't send friend request to self" })
+        } else {
+            const checkExistingRequestResult = await db.query("SELECT friend_request_id, requester, requestee FROM social_media.friend_requests WHERE requester = $1 and requestee = $2", [req.params.userId, emailResult.rows[0].user_id])
+            const checkIfFriendResult = await db.query("SELECT friend_one, friend_two, chat_id FROM social_media.friends WHERE $1 in (friend_one, friend_two) AND $2 in (friend_one, friend_two)", [req.params.userId, emailResult.rows[0].user_id])
+            console.log(checkExistingRequestResult)
+            if (checkExistingRequestResult.rowCount > 0) {
+                res.statusCode = 403;
+                res.json({ error: "Friend request already exists" })
+            } else if (checkIfFriendResult.rowCount > 0) {
+                res.statusCode = 403;
+                res.json({ error: "Already friends" })
+            } else {
+                const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, $2)", [req.params.userId, emailResult.rows[0].user_id]);
+                console.log(result)
+                res.json({ username: emailResult.rows[0].username })
+            }
         }
     } else {
         res.statusCode = 400;
