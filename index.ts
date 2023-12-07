@@ -48,7 +48,7 @@ app.use(cookieParser())
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const getVerificationMessage = (url: string): string => {
+const getVerificationMessage = (url: string, username: string): string => {
     return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -58,29 +58,58 @@ const getVerificationMessage = (url: string): string => {
     <title>Static Template</title>
   </head>
   <style>
-    a {
-      color: black;
+    .btn, .btn:hover {
+      	color: rgb(229 231 235);
+    	height: 3.5rem;
+    	display: flex;
+    	flex-direction: column;
+    justify-content: center
+    	border-radius: 0.5rem;
+    	background-color: #0c4469;
+    	width: 25%;
+    	margin:auto;
+    min-width: min-content;
+    	
+    }
+    body {
+          	color: rgb(229 231 235);
+
+    	background-color: #051b29;
+    gap: 3rem;
+    padding: 1rem;
+       display: flex;
+    flex-direction: column;
+    }
+    
+    
+    .form {
+    background-color: rgb(31 41 55 / 200);
+    padding: 1rem;
+    width: 65%;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
     }
   </style>
   <body>
-    <h1>Welcome to MCSocialMedia</h1>
-    <h2>Click the button below to verify your account</h2>
-    <a
+<svg height="50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 217.04 85.04"><defs><style>.cls-1{fill:#dceefa;}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><polygon class="cls-1" points="14.19 83.96 0 83.83 26.02 21.74 40.21 21.87 14.19 83.96"/><polygon class="cls-1" points="66.51 84.12 55.94 84.12 77.85 0 88.42 0 66.51 84.12"/><polygon class="cls-1" points="55.97 83.96 65.36 83.96 43.52 0.16 34.13 0.16 55.97 83.96"/><path class="cls-1" d="M126.38,65v2.26c0,8.5-1.53,17.8-13.61,17.8-11.57,0-13.55-8.2-13.55-18V33c0-10.69,4.59-16.59,13.64-16.59,11.21,0,13.22,8,13.22,16.71v2.61h-7.22V32.63c0-5.29-.83-9.69-6.11-9.69-5,0-6.27,4-6.27,9.86V67.48c0,6.7,1.46,11.11,6.48,11.11,5.21,0,6.15-4.52,6.15-10.81V65Z"/><path class="cls-1" d="M140.88,14.39V37.82c1.32-3,4.28-5.39,9.32-5.39,7.62,0,9.9,5.73,9.9,13.08V84.15H153V47.31c0-4.25-.58-8.37-5.39-8.37-5.45,0-6.72,4.17-6.72,11.58V84.15h-7.1V14.39Z"/><path class="cls-1" d="M192.52,75.34c0,3.47.06,7.31.2,8.81h-6.6a35.85,35.85,0,0,1-.53-4.14C184,83.77,180.81,85,177.26,85,169.9,85,167,78.42,167,70.56v-.9c0-11.52,7.15-15.59,16.22-15.59h2.21V46c0-4.61-.78-7.53-4.77-7.53s-5,3-5,7v1.35h-7V45.58c0-7.11,2.8-13.15,12.3-13.15,8.88,0,11.65,5.56,11.65,13.07Zm-7-15.6h-2.48c-5.77,0-9.2,2.42-9.2,9.77v.85c0,4.55,1.41,8.21,5.39,8.21,4.68,0,6.29-3.74,6.29-11.36Z"/><path class="cls-1" d="M197,33.23h5.84V20.72h7.05V33.23H217v6.31h-7.18V73.73c0,2.62.47,5.13,3.68,5.13a15.51,15.51,0,0,0,3.19-.3v5.5a16,16,0,0,1-5.52.78c-4.94,0-8.4-2-8.4-9.82V39.54H197Z"/><rect class="cls-1" x="81.99" width="9.95" height="84.12"/></g></g></svg>
+    <div class="form">
+          <div>
+      Hey <b>${username}</b>, <br /> <br/>
+      
+      Your nearly ready to start chatting. Click on the button below to verify your email and address.
+
+    </div>
+    <a class="btn"
       href="${url}"
-      style="
-        border: 1px;
-        border-style: solid;
-        height: 3rem;
-        width: 15rem;
-        border-radius: 10px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        text-decoration: none;
-      "
+      
     >
-      Verfiy Account
+     <div>
+       Verfiy Account </div>
     </a>
+    </div>
+
   </body>
 </html>`
 }
@@ -89,7 +118,7 @@ console.log("Database_URL", process.env.DATABASE_URL);
 const mailgun = new Mailgun(FormData);
 const mg = mailgun.client({ username: 'api', key: process.env.MAILGUN_API_KEY || 'key-yourkeyhere' });
 
-const sendVerificationEmail = async (email: string, url: string) => {
+const sendVerificationEmail = async (email: string, url: string, username: string) => {
     console.log(process.env.MAILGUN_API_KEY)
 
     mg.messages.create('email.mustapha-conteh.me', {
@@ -97,7 +126,7 @@ const sendVerificationEmail = async (email: string, url: string) => {
         to: [email],
         subject: "Email Verification",
         text: "Testing some Mailgun awesomeness!",
-        html: getVerificationMessage(url)
+        html: getVerificationMessage(url, username)
     })
         .then(msg => console.log(msg)) // logs response data
         .catch(err => console.log(err)); // logs any error
@@ -324,9 +353,9 @@ app.post('/api/users/:userId/friend_request', authorization, validateUserIdParam
                 res.statusCode = 403;
                 res.json({ error: "Already friends" })
             } else {
-                const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, $2)", [req.params.userId, emailResult.rows[0].user_id]);
-                console.log(result)
-                res.json({ username: emailResult.rows[0].username })
+                const result: pg.QueryResult = await db.query("INSERT INTO social_media.friend_requests(requester, requestee) VALUES ($1, $2) RETURNING friend_request_id", [req.params.userId, emailResult.rows[0].user_id]);
+                console.log(result.rows[0])
+                res.json({ username: emailResult.rows[0].username, friend_request_id: result.rows[0].friend_request_id, friend_id: emailResult.rows[0].user_id })
             }
         }
     } else {
@@ -519,7 +548,7 @@ const registerUser = async (response: Response, email: string, password: string,
         const addUserResult = await addNewUser(email, username, hashedPassword, salt);
         const emailToken = await jsonwebtoken.sign({ userId: addUserResult.rows[0].user_id }, process.env["jwt_secret"] as string);
         const verificationMessage = `${process.env.FRONTEND_URL as string}/?token=${emailToken}`
-        sendVerificationEmail(email, verificationMessage);
+        sendVerificationEmail(email, verificationMessage, username);
         console.log("User added");
         response.sendStatus(201);
     } else {
