@@ -212,6 +212,14 @@ const validateUserIdParam = (req: Request, res: Response, next: Function) => {
     }
 }
 
+const validateChatIdParam = (req: Request, res: Response, next: Function) => {
+    const validUUID = validator.isUUID(req.params.chatId, 4)
+    if (validUUID) {
+        next()
+    } else {
+        res.sendStatus(400)
+    }
+}
 app.post('/api/getMessages', authorization, async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
         userId: Joi.string().required(),
@@ -405,6 +413,19 @@ app.get('/api/users/:userId/friend_request', authorization, validateUserIdParam,
     }
 });
 
+
+app.get('/api/chats/:chatId/info', authorization, validateChatIdParam, async (req: Request, res: Response) => {
+    if (await checkUserInChat(req.body.userId, req.params.chatId)) {
+        const result: pg.QueryResult = await db.query("SELECT social_media.users.* FROM (SELECT * FROM social_media.chat_members WHERE chat = $1 AND social_media.chat_members.user != $2) as other_users, social_media.users WHERE user_id = other_users.user", [req.params.chatId, req.body.userId]);
+        if (result.rowCount > 0) {
+            res.send({ name: result.rows[0].username, imageUrl: `/api/users/${result.rows[0].user_id}/profilePicture`, chatId: req.params.chatId })
+        } else {
+            res.sendStatus(404)
+        }
+    } else {
+        res.sendStatus(401);
+    }
+});
 
 app.post('/api/users/:userId/accept_request', authorization, validateUserIdParam, async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
