@@ -31,9 +31,10 @@ const storeMessage = async (req: Request, res: Response) => {
     }
 }
 const getChatInfo = async (req: Request, res: Response) => {
-    const chat = await ChatModel.getChat(req.body.chatId)
+    console.log("Getting chat info")
+    const chat = await ChatModel.getChat(req.params.chatId)
     if (!chat) {
-        return null;
+        res.sendStatus(404);
     } else {
         switch (chat.chat_type) {
             case (ChatType.DIRECT_MESSAGE):
@@ -47,6 +48,7 @@ const getChatInfo = async (req: Request, res: Response) => {
                 break;
             case (ChatType.GROUP):
                 res.send({ name: chat.name, imageUrl: `/api/chat/${req.params.chatId}/picture`, chatId: req.params.chatId })
+                break;
             default:
                 console.log("Unsupported chat type: ", chat.chat_type);
                 res.sendStatus(500);
