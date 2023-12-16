@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import * as Joi from 'joi'
 import * as ChatModel from "../models/chat.model";
+import ChatMemberType from "../enums/ChatMemberType";
 
 const getMessages = async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
@@ -29,11 +30,67 @@ const storeMessage = async (req: Request, res: Response) => {
     }
 }
 const getChatInfo = async (req: Request, res: Response) => {
-    const result = await ChatModel.getChatInfo(req.params.chatId, req.body.userId);
-    res.send({ name: result[0].username, imageUrl: `/api/user/${result[0].user_id}/profilePicture`, chatId: req.params.chatId })
+    const chat = await ChatModel.getChat(req.body.chatId)
+    if (!chat) {
+        return null;
+    } else {
+        switch (chat.chat_type) {
+            case (ChatType.DIRECT_MESSAGE):
+                const result = await ChatModel.getDMChatInfo(req.params.chatId, req.body.userId);
+                if (!result) {
+                    console.log("Error getting chat info")
+                    res.sendStatus(500);
+                } else {
+                    res.send({ name: result[0].username, imageUrl: `/api/user/${result[0].user_id}/profilePicture`, chatId: req.params.chatId })
+                }
+                break;
+            case (ChatType.GROUP):
+                res.send({ name: chat.name, imageUrl: `/api/chat/${req.params.chatId}/picture`, chatId: req.params.chatId })
+            default:
+                console.log("Unsupported chat type: ", chat.chat_type);
+                res.sendStatus(500);
+        }
+    }
 }
 const checkUserInChat = async (req: Request, res: Response) => {
     console.log("Checking access")
     res.sendStatus(200);
 }
-export { getMessages, storeMessage, getChatInfo, checkUserInChat }
+const createGroupChat = async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required(),
+        name: Joi.string().min(1).required(),
+    })
+    const validation_result: Joi.ValidationResult = schema.validate(req.body);
+    if (validation_result.error) {
+        res.sendStatus(400)
+    } else {
+        const chatId = await ChatModel.addChat(req.body.name, ChatType.GROUP);
+        await ChatModel.addMember(req.body.userId, chatId.toString(), ChatMemberType.OWNER);
+        res.statusCode = 201;
+        res.send({ chatId, name: req.body.name })
+    }
+}
+const deleteGroupChat = async (req: Request, res: Response) => {
+    const schema: Joi.AnySchema = Joi.object().keys({
+        userId: Joi.string().required(),
+    })
+    const validation_result: Joi.ValidationResult = schema.validate(req.body);
+    if (validation_result.error) {
+        res.sendStatus(400)
+    } else {
+        const chatOwner = await ChatModel.getChatOwner(req.params.chatId);
+        if (!chatOwner) {
+            console.log("Chat has no owner!!")
+            res.sendStatus(500)
+        } else {
+            if (chatOwner.user === req.body.userId) {
+                await ChatModel.removeChat(req.params.chatId)
+                res.sendStatus(200);
+            } else {
+                res.sendStatus(401);
+            }
+        }
+    }
+}
+export { getMessages, storeMessage, getChatInfo, checkUserInChat, createGroupChat, deleteGroupChat }

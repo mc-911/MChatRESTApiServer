@@ -1,5 +1,7 @@
 import { QueryResult } from "pg";
 import db from "../db"
+import Chat from "../types/chat";
+import ChatMemberType from "../enums/ChatMemberType";
 const checkUserInChat = async (userId: string, chatId: string): Promise<boolean> => {
     const result: QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
     console.log(result.rows[0])
@@ -20,8 +22,26 @@ const storeChatMessage = async (ownerId: string, chatId: string, timestamp: numb
 
     console.log(result)
 }
-const getChatInfo = async (chatId: string, userId: string): Promise<{ user_id: string, username: string }[]> => {
+const getDMChatInfo = async (chatId: string, userId: string): Promise<{ user_id: string, username: string }[] | null> => {
     const result: QueryResult = await db.query("SELECT social_media.users.* FROM (SELECT * FROM social_media.chat_members WHERE chat = $1 AND social_media.chat_members.user != $2) as other_users, social_media.users WHERE user_id = other_users.user", [chatId, userId]);
-    return result.rows;
+    return result.rowCount ? result.rows : null;
 }
-export { checkUserInChat, getChatMessages, storeChatMessage, getChatInfo }
+const getChat = async (chatId: string): Promise<Chat | null> => {
+    return (await db.query("SELECT * FROM social_media.chats WHERE chat_id = $1", [chatId])).rows[0] ?? null;
+}
+const addChat = async (chatName: string, type: string): Promise<String> => {
+    const result: QueryResult = await db.query("INSERT INTO social_media.chats(chat_type, name) VALUES ($1, $2) RETURNING chat_id", [type, chatName])
+    return result.rows[0].chat_id;
+}
+
+const addMember = async (userId: string, chatId: string, memberType: string) => {
+    await db.query("INSERT INTO social_media.chat_members(chat, user, type) VALUES ($1, $2, $3)", [chatId, userId, memberType])
+}
+const getChatOwner = async (chatId: string): Promise<{ chat: string, user: string, type: ChatMemberType } | null> => {
+    const result = await db.query("SELECT * FROM social_media.chats_members WHERE chat = $1 AND \"type\" = 'OWNER'")
+    return result.rowCount > 0 ? result.rows[0] : null
+}
+const removeChat = async (chatId: string) => {
+    const result = await db.query("DELETE FROM social_media.chats WHERE chat_id = $1", [chatId])
+}
+export { checkUserInChat, getChatMessages, storeChatMessage, getDMChatInfo, addChat, removeChat, addMember, getChat, getChatOwner }
