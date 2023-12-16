@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import * as Joi from 'joi'
 import * as ChatModel from "../models/chat.model";
 import ChatMemberType from "../enums/ChatMemberType";
+import ChatType from "../enums/ChatType"
 
 const getMessages = async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
