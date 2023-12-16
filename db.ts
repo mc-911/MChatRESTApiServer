@@ -12,6 +12,6 @@ const pool = process.env.DATABASE_URL ? new Pool({
   database: process.env["database_name"]
 })
 
-module.exports = {
+export default {
   query: (text: string, params?: any[]) => pool.query(text, params)
 };

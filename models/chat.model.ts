@@ -1,5 +1,5 @@
 import { QueryResult } from "pg";
-const db = require('../db.ts');
+import db from "../db"
 const checkUserInChat = async (userId: string, chatId: string): Promise<boolean> => {
     const result: QueryResult = await db.query(`SELECT $1 in (SELECT chat_members.user FROM social_media.chat_members where chat = $2) as user_in_chat`, [userId, chatId]);
     console.log(result.rows[0])

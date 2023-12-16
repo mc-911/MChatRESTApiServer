@@ -1,7 +1,7 @@
 import { QueryResult } from "pg";
 import User from "../types/user"
 import FriendRequest from "../types/friendRequest";
-const db = require('../db.ts');
+import db from "../db"
 const getUserByEmail = async (email: string): Promise<User | null> => {
     const result: QueryResult = await db.query(`SELECT * FROM social_media.users WHERE email = $1`, [email]);
     if (result.rows.length == 0) {
