@@ -36,6 +36,7 @@ const getChatInfo = async (req: Request, res: Response) => {
     if (!chat) {
         res.sendStatus(404);
     } else {
+        await ChatModel.getMemberInfo(req.body.userId, req.params.chatId)
         switch (chat.chat_type) {
             case (ChatType.DIRECT_MESSAGE):
                 const result = await ChatModel.getDMChatInfo(req.params.chatId, req.body.userId);
@@ -47,7 +48,7 @@ const getChatInfo = async (req: Request, res: Response) => {
                 }
                 break;
             case (ChatType.GROUP):
-                res.send({ name: chat.name, imageUrl: `/api/chat/${req.params.chatId}/picture`, chatId: req.params.chatId })
+                res.send({ name: chat.name, imageUrl: `/api/chat/${req.params.chatId}/picture`, chatId: req.params.chatId, role: req.body.role })
                 break;
             default:
                 console.log("Unsupported chat type: ", chat.chat_type);
@@ -59,40 +60,45 @@ const checkUserInChat = async (req: Request, res: Response) => {
     console.log("Checking access")
     res.sendStatus(200);
 }
+
 const createGroupChat = async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
         userId: Joi.string().required(),
         name: Joi.string().min(1).required(),
+        memberIds: Joi.array<string>(),
     })
     const validation_result: Joi.ValidationResult = schema.validate(req.body);
     if (validation_result.error) {
-        res.sendStatus(400)
+        res.statusCode = 400;
+        res.send({ error: validation_result.error.message })
     } else {
         const chatId = await ChatModel.addChat(req.body.name, ChatType.GROUP);
+        console.log(req.body)
         await ChatModel.addMember(req.body.userId, chatId.toString(), ChatMemberType.OWNER);
+        if (req.body.memberIds) {
+            req.body.memberIds.forEach(async (memberId: string) => {
+                await ChatModel.addMember(memberId, chatId.toString(), ChatMemberType.MEMBER)
+            });
+        }
         res.statusCode = 201;
         res.send({ chatId, name: req.body.name })
     }
 }
+
 const deleteGroupChat = async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
         userId: Joi.string().required(),
+        role: Joi.string().required(),
     })
     const validation_result: Joi.ValidationResult = schema.validate(req.body);
     if (validation_result.error) {
         res.sendStatus(400)
     } else {
-        const chatOwner = await ChatModel.getChatOwner(req.params.chatId);
-        if (!chatOwner) {
-            console.log("Chat has no owner!!")
-            res.sendStatus(500)
+        if (req.body.role !== ChatMemberType.OWNER) {
+            res.sendStatus(401);
         } else {
-            if (chatOwner.user === req.body.userId) {
-                await ChatModel.removeChat(req.params.chatId)
-                res.sendStatus(200);
-            } else {
-                res.sendStatus(401);
-            }
+            await ChatModel.removeChat(req.params.chatId)
+            res.sendStatus(200);
         }
     }
 }

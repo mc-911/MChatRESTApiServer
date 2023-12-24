@@ -76,4 +76,9 @@ const addFriend = async (userOneId: string, userTwoId: string) => {
     const insertResult: QueryResult = await db.query("INSERT INTO social_media.friends(friend_one, friend_two) VALUES ($1, $2);", [userOneId, userTwoId]);
 }
 
-export { getUserByEmail, checkEmailExists, addNewUser, activateUser, getUserById, updateProfilePicture, updateUsername, getFriends, removeFriend, checkForExistingRequest, checkIfFriends, addFriendRequest, getFriendRequest, removeFriendRequest, getFriendRequests, addFriend }
+const getChats = async (userId: string, chatType: "DIRECT_MESSAGE" | "GROUP") => {
+    const result: QueryResult = await db.query("SELECT social_media.chats.name, chat_id as id FROM social_media.chats where chat_type = $1 AND chat_id in (SELECT chat FROM social_media.chat_members WHERE \"user\" = $2)", [chatType, userId])
+    return result.rows;
+}
+
+export { getUserByEmail, checkEmailExists, addNewUser, activateUser, getUserById, updateProfilePicture, updateUsername, getFriends, removeFriend, checkForExistingRequest, checkIfFriends, addFriendRequest, getFriendRequest, removeFriendRequest, getFriendRequests, addFriend, getChats }

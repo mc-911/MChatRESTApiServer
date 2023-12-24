@@ -1,7 +1,9 @@
+import ChatType from "../enums/ChatType";
+
 type Chat = {
     chat_id: string,
     chat_type: ChatType,
-    chat_picture: string,
+    chat_photo: string,
     name: string
 }
 

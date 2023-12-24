@@ -334,6 +334,12 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
         res.send(error.message);
     }
 }
+
+const getGroupChats = async (req: Request, res: Response) => {
+    const chats = await UserModel.getChats(req.params.userId, "GROUP");
+    res.send({ chats });
+}
+
 const getVerificationMessage = (url: string, username: string): string => {
     return `<!DOCTYPE html>
 <html lang="en">
@@ -399,4 +405,4 @@ const getVerificationMessage = (url: string, username: string): string => {
   </body>
 </html>`
 }
-export { loginUser, registerUser, verifyUser, getProfilePicture, updateProfilePicture, updateUsername, getFriends, removeFriend, sendFriendRequest, denyFriendRequest, getFriendRequests, acceptFriendRequest }
+export { loginUser, registerUser, verifyUser, getProfilePicture, updateProfilePicture, updateUsername, getFriends, removeFriend, sendFriendRequest, denyFriendRequest, getFriendRequests, acceptFriendRequest, getGroupChats }

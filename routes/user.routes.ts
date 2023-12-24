@@ -14,4 +14,5 @@ module.exports = (app: Express) => {
     app.route("/api/user/:userId/deny_request").post(authentication, UserMiddleware.validateUserIdParam, UserControllers.denyFriendRequest)
     app.route("/api/user/:userId/accept_request").post(authentication, UserMiddleware.validateUserIdParam, UserControllers.acceptFriendRequest)
     app.route("/api/user/:userId/username").put(authentication, UserMiddleware.validateUserIdParam, UserControllers.updateUsername)
+    app.route("/api/user/:userId/groupChats").get(authentication, UserMiddleware.validateUserIdParam, UserControllers.getGroupChats)
 }
