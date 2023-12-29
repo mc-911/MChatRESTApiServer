@@ -129,11 +129,11 @@ const verifyUser = async (req: Request, res: Response) => {
     if (validation_result.error) {
         res.sendStatus(400)
     } else {
-        const userId = getUserIdFromJwt(req.body.token);
+        const userId = await getUserIdFromJwt(req.body.token);
         if (!userId) {
             res.sendStatus(400);
         } else {
-            await UserModel.activateUser(req.body.userId)
+            await UserModel.activateUser(userId.valueOf())
             res.sendStatus(200)
         }
     }
