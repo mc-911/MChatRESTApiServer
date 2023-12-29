@@ -248,12 +248,13 @@ const removeFriend = async (req: Request, res: Response) => {
 
 const sendFriendRequest = async (req: Request, res: Response) => {
     const schema: Joi.AnySchema = Joi.object().keys({
-        friend_email: Joi.string().required(),
+        friend_email: Joi.string().optional(),
+        requesteeId: Joi.string().optional(),
         userId: Joi.string().required()
     });
     const error = schema.validate(req.body).error;
-    if (!error) {
-        const friend = await UserModel.getUserByEmail(req.body.friend_email);
+    if (!error && req.body.requesteeId || req.body.friend_email) {
+        const friend = await (req.body.requesteeId ? UserModel.getUserById(req.body.requesteeId) : UserModel.getUserByEmail(req.body.friend_email));
         if (!friend) {
             res.sendStatus(404);
         } else if (req.params.userId === friend.user_id) {
@@ -268,12 +269,11 @@ const sendFriendRequest = async (req: Request, res: Response) => {
                 res.json({ error: "Already friends" })
             } else {
                 const friendRequestId = await UserModel.addFriendRequest(req.params.userId, friend.user_id);
-                res.json({ username: friend.username, friend_request_id: friendRequestId, friend_id: friend.user_id })
+                res.json({ username: friend.username, friend_request_id: friendRequestId, user_id: friend.user_id })
             }
         }
     } else {
-        res.statusCode = 400;
-        res.send(error.message);
+        res.sendStatus(400);
     }
 }
 const denyFriendRequest = async (req: Request, res: Response) => {
