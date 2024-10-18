@@ -15,7 +15,7 @@ const loginUser = async (req: Request, res: Response) => {
     console.log('req.body: ', req.body);
     const schema: Joi.AnySchema = Joi.object().keys({
         email: Joi.string().email().required(),
-        password: Joi.string().regex(/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[!@#\$&*~]).{8,}$/).required()
+        password: Joi.string().min(1)
     });
     const validation_result: Joi.ValidationResult = schema.validate(req.body);
     if (!validation_result.error) {
