@@ -87,7 +87,7 @@ const registerUser = async (req: Request, res: Response) => {
     const value = validation_result.value;
     if (!error) {
         if (!await UserModel.checkEmailExists(email)) {
-            const active = process.env.ENVIRONMENT == "prod" ? false : true;
+            const active = true;
             const salt = await genSalt(10);
             const hashedPassword = await hash(password, salt);
             const addUserResult = await UserModel.addNewUser(email, username, hashedPassword, salt, active);
