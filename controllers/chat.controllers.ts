@@ -36,9 +36,9 @@ const storeMessage = async (req: Request, res: Response) => {
     }
 }
 const getChatInfo = async (req: Request, res: Response) => {
-    console.log("Getting chat info")
+    // console.log("Getting chat info")
     const chat = await ChatModel.getChat(req.params.chatId)
-    console.log(chat)
+    // console.log(chat)
     if (!chat) {
         res.sendStatus(404);
     } else {
@@ -46,7 +46,7 @@ const getChatInfo = async (req: Request, res: Response) => {
             case (ChatType.DIRECT_MESSAGE):
                 const result = await ChatModel.getDMChatInfo(req.params.chatId, req.body.userId);
                 if (!result) {
-                    console.log("Error getting chat info")
+                    // console.log("Error getting chat info")
                     res.sendStatus(500);
                 } else {
                     res.send({ name: result[0].username, imageUrl: `/api/user/${result[0].user_id}/profilePicture`, chatId: req.params.chatId, role: req.body.role, type: chat.chat_type })

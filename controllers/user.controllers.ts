@@ -87,12 +87,15 @@ const registerUser = async (req: Request, res: Response) => {
     const value = validation_result.value;
     if (!error) {
         if (!await UserModel.checkEmailExists(email)) {
+            const active = process.env.ENVIRONMENT == "prod" ? false : true;
             const salt = await genSalt(10);
             const hashedPassword = await hash(password, salt);
-            const addUserResult = await UserModel.addNewUser(email, username, hashedPassword, salt);
+            const addUserResult = await UserModel.addNewUser(email, username, hashedPassword, salt, active);
             const emailToken = await sign({ userId: addUserResult.rows[0].user_id }, process.env["jwt_secret"] as string);
-            const verificationMessage = `${process.env.FRONTEND_URL as string}/?token=${emailToken}`
-            sendVerificationEmail(email, verificationMessage, username);
+            if (!active) {
+                const verificationMessage = `${process.env.FRONTEND_URL as string}/?token=${emailToken}`
+                sendVerificationEmail(email, verificationMessage, username);
+            }
             console.log("User added");
             res.sendStatus(201);
         } else {

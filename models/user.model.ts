@@ -16,8 +16,8 @@ const checkEmailExists = async (email: string): Promise<boolean> => {
     const result: QueryResult = await db.query(`SELECT COUNT(*) as email_count FROM social_media.users WHERE email = $1`, [email]);
     return result.rows[0].email_count > 0
 }
-const addNewUser = async (email: string, username: string, hashedPassword: string, salt: string): Promise<QueryResult> => {
-    return db.query(`INSERT INTO social_media.users (email, username, password, salt) VALUES ($1, $2, $3, $4) RETURNING user_id`, [email, username, hashedPassword, salt])
+const addNewUser = async (email: string, username: string, hashedPassword: string, salt: string, active: boolean): Promise<QueryResult> => {
+    return db.query(`INSERT INTO social_media.users (email, username, password, salt, active) VALUES ($1, $2, $3, $4, $5) RETURNING user_id`, [email, username, hashedPassword, salt, active])
 }
 const getUserById = async (userId: string): Promise<User | null> => {
     const result: QueryResult = await db.query("SELECT * from social_media.users where user_id = $1", [userId])

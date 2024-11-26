@@ -12,10 +12,10 @@ const authentication = (req: Request, res: Response, next: Function) => {
                 throw new Error('Invalid token');
             }
             req.body.userId = decoded.userId;
-            console.log("Request Authenticated.. Moving on")
+            // console.log("Request Authenticated.. Moving on")
             next();
         } catch (err) {
-            console.log("Request not authenticated")
+            // console.log("Request not authenticated")
             res.sendStatus(401);
         }
     }
